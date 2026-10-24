@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>HCM Lite</title><style>
+:root{--bg:#f4f6fa;--cd:#fff;--tx:#1d2540;--mu:#6b7390;--pr:#12a086;--bd:#e0e4ee;--wa:#e8962e;--rd:#c8473d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a2e;--cd:#1f2740;--tx:#eef0f8;--mu:#9aa3c0;--bd:#323c5c}}
+:root[data-theme="dark"]{--bg:#141a2e;--cd:#1f2740;--tx:#eef0f8;--mu:#9aa3c0;--bd:#323c5c}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--tx);font:15px system-ui,sans-serif}
+#app{max-width:980px;margin:auto;padding:12px}.cd{background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:10px 0}
+h1,h2,h3{margin:0 0 8px}h3{font-size:16px}.mu{color:var(--mu);font-size:13px}
+input,select,textarea,button{font:inherit;padding:9px;border-radius:8px;border:1px solid var(--bd);background:var(--cd);color:var(--tx);margin:3px 0;max-width:100%}
+input,select,textarea{width:100%}button{background:var(--pr);color:#fff;border:0;cursor:pointer;width:auto}button.g{background:var(--mu)}button.r{background:var(--rd)}
+.nav{display:flex;gap:6px;overflow-x:auto;padding:4px 0}.nav button{background:var(--cd);color:var(--tx);border:1px solid var(--bd);white-space:nowrap}.nav button.on{background:var(--pr);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.k{font-size:26px;font-weight:700;color:var(--pr)}
+.w{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.bar{height:12px;background:var(--pr);border-radius:6px}.msg{background:#e8962e22;border:1px solid var(--wa);padding:8px;border-radius:8px;margin:8px 0}
+.b{padding:8px 11px;border-radius:10px;margin:5px 0;max-width:85%}.u{background:var(--pr);color:#fff;margin-left:auto}.a{background:var(--bg)}
+@media print{.nav,header,button{display:none}}
+</style></head><body><div id="app"></div><script>
+const K='hcm_lite_v1';let DB=null,ME=null,tab='dash',msg='',CH=[],pay='',slip=null;
+try{DB=JSON.parse(localStorage.getItem(K))}catch(e){}
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(DB))}catch(e){}};
+const $=id=>document.getElementById(id),v=id=>$(id).value.trim();
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const td=()=>iso(new Date()),P=s=>new Date(s+'T00:00:00'),mn=s=>+s.slice(0,2)*60+ +s.slice(3);
+const tm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+const uid=()=>Math.random().toString(36).slice(2,10);
+async function H(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('hcm'+s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const isW=(d,i)=>d.getDay()%6!==0&&!DB.holidays.includes(i);
+function wd(a,b){let n=0;for(let d=P(a);d<=P(b);d.setDate(d.getDate()+1))if(isW(d,iso(d)))n++;return n}
+const emp=id=>DB.emps.find(e=>e.id===(id||ME.empId));
+const onL=(e,t)=>DB.leaves.find(l=>l.emp===e&&l.status==='approved'&&l.start<=t&&t<=l.end);
+function st(e,t){const r=DB.att.find(a=>a.emp===e&&a.date===t);if(r)return r.status;if(onL(e,t))return'on_leave';const d=P(t);return t<=td()&&isW(d,t)?'absent':'-'}
+const hrs=r=>r.out?(mn(r.out)-mn(r.in))/60:0;
+const QUOTA={annual:14,sick:8,casual:10,unpaid:1e9};
+const bal=(e,t)=>QUOTA[t]-DB.leaves.filter(l=>l.emp===e&&l.type===t&&l.status==='approved'&&l.start.slice(0,4)===td().slice(0,4)).reduce((s,l)=>s+l.days,0);
+function log(a,en,b,af){DB.audit.unshift({t:new Date().toLocaleString(),who:ME?.email||'system',a,en,b:JSON.stringify(b||null),af:JSON.stringify(af||null)})}
+function note(uidv,t){DB.notes.unshift({u:uidv,t,d:td()})}
+const tax=a=>a<=6e5?0:a<=1.2e6?(a-6e5)*.05:a<=2.4e6?3e4+(a-1.2e6)*.15:a<=3.6e6?21e4+(a-2.4e6)*.25:51e4+(a-3.6e6)*.35;
+const tbl=(h,r)=>`<div class="w"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${r.map(x=>`<tr>${x.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${h.length}" class="mu">Nothing here yet</td></tr>`}</table></div>`;
+const opt=a=>a.map(x=>`<option>${esc(x)}</option>`).join('');
+const go=t=>{tab=t;msg='';R()};
+
+/* ---------- auth ---------- */
+async function setup(){const c=v('c'),n=v('n'),e=v('e').toLowerCase(),p=$('p').value;if(!c||!n||!e||p.length<6){alert('Fill all fields (password 6+ chars)');return}
+DB={company:c,set:{start:'09:00',grace:15,half:5,lat:'',lng:'',rad:150},depts:[],desigs:[],holidays:[],users:[{id:uid(),email:e,name:n,role:'admin',h:await H(p),must:false,active:true}],emps:[],att:[],leaves:[],payroll:{},ann:[],notes:[],audit:[]};save();R()}
+async function login(){const u=DB.users.find(x=>x.email===v('e').toLowerCase());if(!u||!u.active||u.h!==await H($('p').value)){msg='Wrong email or password';R();return}ME=u;msg='';tab='dash';R()}
+async function chpw(){const p=$('p').value;if(p.length<6)return alert('6+ characters');ME.h=await H(p);ME.must=false;save();R()}
+const logout=()=>{ME=null;CH=[];R()};
+function resetAll(){try{localStorage.removeItem(K)}catch(e){}DB=null;ME=null;CH=[];msg='';tab='dash';R()}
+
+/* ---------- actions ---------- */
+function saveSet(){const s=DB.set;s.start=v('s1');s.grace=+v('s2');s.half=+v('s3');s.lat=v('s4');s.lng=v('s5');s.rad=+v('s6');log('update','settings',null,s);save();msg='Settings saved';R()}
+function addList(k,id){const x=v(id);if(!x)return;DB[k].push(x);log('create',k,null,x);save();R()}
+async function addUser(role,name,email,empId){const t=uid(),u={id:uid(),email,name,role,h:await H(t),must:true,active:true,empId};DB.users.push(u);log('create','user',null,{email,role});save();return t}
+async function addHR(){const n=v('hn'),e=v('he').toLowerCase();if(!n||!e)return;const t=await addUser('hr',n,e);msg=`HR login created: ${e} / temp password ${t}`;R()}
+async function regEmp(){const n=v('en'),e=v('ee').toLowerCase(),b=+v('eb');if(!n||!e.includes('@')||!(b>0)||!DB.depts.length||DB.users.some(u=>u.email===e)){alert('Check fields: name, unique valid email, salary>0, and Admin must add a department first');return}
+const x={id:uid(),code:'E'+String(DB.emps.length+1).padStart(3,'0'),name:n,email:e,dept:v('ed'),desig:v('eg'),basic:b,phone:v('ep'),addr:'',join:v('ej')||td(),active:true};DB.emps.push(x);const t=await addUser('employee',n,e,x.id);log('create','employee',null,x);msg=`${n} registered. Login: ${e} / temp password ${t}`;save();R()}
+function tog(id){const u=DB.users.find(x=>x.id===id);u.active=!u.active;log('update','user',null,{email:u.email,active:u.active});const e=DB.emps.find(x=>x.id===u.empId);if(e)e.active=u.active;save();R()}
+async function reset(id){const u=DB.users.find(x=>x.id===id),t=uid();u.h=await H(t);u.must=true;log('update','user-reset',null,{email:u.email});save();msg=`Temp password for ${u.email}: ${t}`;R()}
+function savePr(){const e=emp();e.phone=v('pp');e.addr=v('pa');save();msg='Profile saved';R()}
+function chk(o){const t=td(),r=DB.att.find(a=>a.emp===ME.empId&&a.date===t),s=DB.set;
+if(!o){if(r)return alert('409: already checked in today');const late=mn(tm())>mn(s.start)+s.grace;DB.att.push({emp:ME.empId,date:t,in:tm(),status:late?'late':'present'})}
+else{if(!r)return alert('Check in first');if(r.out)return alert('Already checked out');r.out=tm();if(hrs(r)<s.half)r.status='half_day'}save();R()}
+function parseLeave(){const s=v('sl').toLowerCase(),d=new Date(),days=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];let hit=[];
+days.forEach((n,i)=>{if(s.includes(n)||s.includes(n.slice(0,3)+' ')||s.endsWith(n.slice(0,3)))hit.push(i)});
+const nxt=s.includes('next');let ds=[];hit.forEach(i=>{const x=new Date(d);let diff=(i-d.getDay()+7)%7;if(diff===0||nxt&&diff<7-d.getDay()+1&&false)diff=7;if(nxt&&diff<=7-d.getDay()+(d.getDay()===0?0:0)&&d.getDay()!==0&&i>d.getDay())diff+=7;x.setDate(d.getDate()+diff);ds.push(iso(x))});
+if(s.includes('tomorrow')){const x=new Date(d);x.setDate(d.getDate()+1);ds.push(iso(x))}if(s.includes('today'))ds.push(td());
+ds.sort();if(!ds.length)return alert('Could not find dates. Try: "next Monday and Tuesday off for a wedding"');
+const type=/sick|fever|ill|doctor|bimar/.test(s)?'sick':/annual|vacation|holiday/.test(s)?'annual':'casual';
+$('lt').value=type;$('ls').value=ds[0];$('le').value=ds[ds.length-1];$('lr').value=s.replace(/.*(for|ke liye)\s+/,'')||s}
+function applyL(){const t=v('lt'),a=v('ls'),b=v('le'),r=v('lr');if(!a||!b||b<a)return alert('Check dates');const days=wd(a,b);
+if(!days)return alert('422: no working days in range');
+if(DB.leaves.some(l=>l.emp===ME.empId&&l.status!=='rejected'&&l.status!=='cancelled'&&l.start<=b&&a<=l.end))return alert('422: overlaps another leave');
+if(days>bal(ME.empId,t))return alert('422: not enough balance');
+DB.leaves.push({id:uid(),emp:ME.empId,type:t,start:a,end:b,days,reason:r,status:'pending',comment:''});log('create','leave',null,{t,a,b});save();msg='Leave submitted';R()}
+function decide(id,ok){const l=DB.leaves.find(x=>x.id===id),c=$('c'+id).value;l.status=ok?'approved':'rejected';l.comment=c;log(ok?'approve':'reject','leave',{status:'pending'},{status:l.status});
+const u=DB.users.find(x=>x.empId===l.emp);if(u)note(u.id,`Your ${l.type} leave ${l.start} was ${l.status}`);save();R()}
+const cancelL=id=>{DB.leaves.find(x=>x.id===id).status='cancelled';save();R()};
+function runPay(){const m=v('pm');if(!m)return;if(DB.payroll[m]?.status==='final')return alert('Month is finalized and locked');
+const[y,mo]=m.split('-').map(Number),f=m+'-01',l=iso(new Date(y,mo,0)),end=td()<l?td():l,W=wd(f,l);
+const rows=DB.emps.filter(e=>e.active&&e.join<=l).map(e=>{let ab=0,hd=0,un=0;const s0=e.join>f?e.join:f;
+if(e.join>f)ab+=wd(f,iso(new Date(P(e.join)-864e5)));
+for(let d=P(s0);d<=P(end);d.setDate(d.getDate()+1)){const i=iso(d);if(!isW(d,i))continue;const s=st(e.id,i);if(s==='absent')ab++;if(s==='half_day')hd++;if(DB.leaves.some(q=>q.emp===e.id&&q.status==='approved'&&q.type==='unpaid'&&q.start<=i&&i<=q.end))un++}
+const g=1.5*e.basic,ded=g/W*(ab+un+.5*hd),tx=tax(g*12)/12;return{emp:e.id,name:e.name,dept:e.dept,gross:Math.round(g),ab,un,hd,ded:Math.round(ded),tax:Math.round(tx),net:Math.round(g-ded-tx)}});
+DB.payroll[m]={status:'draft',rows};log('create','payroll',null,{m,n:rows.length});save();pay=m;R()}
+function finalize(m){DB.payroll[m].status='final';log('finalize','payroll',{status:'draft'},{status:'final',m});DB.payroll[m].rows.forEach(r=>{const u=DB.users.find(x=>x.empId===r.emp);if(u)note(u.id,`Payslip for ${m} is ready`)});save();R()}
+function postAnn(){const t=v('at');if(!t)return;DB.ann.unshift({t,by:ME.name,d:td()});log('create','announcement',null,t);save();R()}
+
+/* ---------- assistant (rule-based tools on the same data, scoped by role) ---------- */
+function ai(q){const s=q.toLowerCase(),t=td(),own=ME.role==='employee',act=DB.emps.filter(e=>e.active),mo=t.slice(0,7);
+if(/salary|pay\b|تنخواہ/.test(s))return own?'Sorry, I can only share your own data, not other people’s salary details.':`Total monthly gross for ${act.length} active employees: ${act.reduce((a,e)=>a+1.5*e.basic,0).toLocaleString()}.`;
+if(/policy|rule|quota|grace|half day|weekend/.test(s))return`Office starts ${DB.set.start}, grace ${DB.set.grace} min (late after that), half day under ${DB.set.half} h, weekend Sat–Sun. Leave quotas: annual 14, sick 8, casual 10, unpaid unlimited. Gross = 1.5 × basic; deductions for absent, unpaid and half days. Admin finalizes payroll.`;
+if(/balance|left|remaining|sick|casual|annual/.test(s)&&ME.empId)return`Your balance: annual ${bal(ME.empId,'annual')}, sick ${bal(ME.empId,'sick')}, casual ${bal(ME.empId,'casual')}.`;
+if(own)return'I can answer about your own leave balance, your data and company policy.';
+if(/leave|chutti/.test(s)){const n=act.filter(e=>onL(e.id,t)).map(e=>e.name);return n.length?`${n.length} on leave today: ${n.join(', ')}.`:'Nobody is on leave today.'}
+if(/late/.test(s)){const c={};DB.att.filter(a=>a.date.startsWith(mo)&&a.status==='late').forEach(a=>c[a.emp]=(c[a.emp]||0)+1);const top=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([i,n])=>`${emp(i)?.name} (${n})`);return top.length?`Most late this month: ${top.join(', ')}.`:'No late arrivals this month.'}
+if(/attendance rate/.test(s)){const r=DB.att.filter(a=>a.date.startsWith(mo));if(!r.length)return'No attendance records yet.';const sc=r.reduce((a,x)=>a+(x.status==='half_day'?.5:1),0);return`Attendance rate this month: ${(sc/r.length*100).toFixed(1)}% across ${r.length} records.`}
+if(/headcount|how many|employees/.test(s)){const d=DB.depts.find(x=>s.includes(x.toLowerCase()));return d?`${act.filter(e=>e.dept===d).length} active employees in ${d}.`:`${act.length} active employees.`}
+return'I don’t know that yet. Try: headcount, who is on leave today, who is late most, attendance rate, or policy questions.'}
+function ask(){const q=v('q');if(!q)return;CH.push(['u',q],['a',ai(q)]);R();$('q').focus()}
+
+/* ---------- views ---------- */
+function dash(){const t=td(),r=ME.role,mo=t.slice(0,7);let h='';
+if(r==='employee'){const e=emp(),w=DB.att.filter(a=>a.emp===e.id&&a.date>iso(new Date(Date.now()-7*864e5))).reduce((s,a)=>s+hrs(a),0),lt=DB.att.filter(a=>a.emp===e.id&&a.date.startsWith(mo)&&a.status==='late').length,ps=Object.entries(DB.payroll).filter(([m,p])=>p.status==='final').sort().pop();
+h=`<div class="grid"><div class="cd"><div class="k">${w.toFixed(1)}</div>hours this week / 40</div><div class="cd"><div class="k">${lt}</div>late this month</div><div class="cd"><div class="k">${bal(e.id,'annual')}/${bal(e.id,'sick')}/${bal(e.id,'casual')}</div>annual / sick / casual left</div><div class="cd"><div class="k">${ps?ps[1].rows.find(x=>x.emp===e.id)?.net.toLocaleString()??'-':'-'}</div>last payslip ${ps?ps[0]:''}</div></div>`}
+else{const a=DB.emps.filter(e=>e.active),pr=DB.att.filter(x=>x.date===t),ol=a.filter(e=>onL(e.id,t)).length,pe=DB.leaves.filter(l=>l.status==='pending').length,dd={};a.forEach(e=>dd[e.dept]=(dd[e.dept]||0)+1);const mx=Math.max(1,...Object.values(dd));
+h=`<div class="grid"><div class="cd"><div class="k">${a.length}</div>headcount</div><div class="cd"><div class="k">${pr.length}</div>present today</div><div class="cd"><div class="k">${ol}</div>on leave</div><div class="cd"><div class="k">${pr.filter(x=>x.status==='late').length}</div>late today</div><div class="cd"><div class="k">${pe}</div>pending leaves</div>${r==='admin'?`<div class="cd"><div class="k">${a.length?Math.round(a.reduce((s,e)=>s+1.5*e.basic,0)/a.length).toLocaleString():0}</div>avg gross salary</div>`:''}</div>
+<div class="cd"><h3>Headcount by department</h3>${Object.entries(dd).map(([k,n])=>`<div class="mu">${esc(k)} · ${n}</div><div class="bar" style="width:${n/mx*100}%"></div>`).join('')||'<span class="mu">No employees yet</span>'}</div>
+<div class="cd"><button onclick="CH.push(['a','Summary (auto): ${a.length} active employees, ${pr.length} present, ${ol} on leave, ${pe} leave requests pending.']);go('ai')">Summarize</button></div>`}
+const n=DB.notes.filter(x=>x.u===ME.id).slice(0,5);
+return h+`<div class="cd"><h3>Announcements</h3>${DB.ann.slice(0,5).map(a=>`<p>📢 ${esc(a.t)} <span class="mu">${a.by} · ${a.d}</span></p>`).join('')||'<span class="mu">None</span>'}</div><div class="cd"><h3>Notifications</h3>${n.map(x=>`<p>🔔 ${esc(x.t)}</p>`).join('')||'<span class="mu">None</span>'}</div>`}
+function org(){const s=DB.set;return`<div class="cd"><h3>Company settings</h3>Office start<input id="s1" type="time" value="${s.start}">Grace (min)<input id="s2" type="number" value="${s.grace}">Half day under (hours)<input id="s3" type="number" value="${s.half}">Office lat<input id="s4" value="${s.lat}">Office lng<input id="s5" value="${s.lng}">Radius (m)<input id="s6" type="number" value="${s.rad}"><button onclick="saveSet()">Save settings</button></div>
+<div class="cd"><h3>Departments</h3>${DB.depts.map(esc).join(', ')||'<span class="mu">None</span>'}<input id="d1" placeholder="New department"><button onclick="addList('depts','d1')">Add</button></div>
+<div class="cd"><h3>Designations</h3>${DB.desigs.map(esc).join(', ')||'<span class="mu">None</span>'}<input id="d2" placeholder="New designation"><button onclick="addList('desigs','d2')">Add</button></div>
+<div class="cd"><h3>Public holidays</h3>${DB.holidays.join(', ')||'<span class="mu">None</span>'}<input id="d3" type="date"><button onclick="addList('holidays','d3')">Add</button></div>
+<div class="cd"><h3>Leave quotas</h3><span class="mu">Annual 14 · Sick 8 · Casual 10 · Unpaid unlimited</span></div>
+<div class="cd"><h3>Create HR login</h3><input id="hn" placeholder="Name"><input id="he" type="email" placeholder="Email"><button onclick="addHR()">Create</button></div>`}
+function people(){let h='';if(ME.role==='hr')h=`<div class="cd"><h3>Register employee</h3><input id="en" placeholder="Full name"><input id="ee" type="email" placeholder="Email"><select id="ed">${opt(DB.depts)}</select><select id="eg">${opt(DB.desigs.length?DB.desigs:['Staff'])}</select><input id="eb" type="number" placeholder="Basic salary"><input id="ep" placeholder="Phone"><input id="ej" type="date"><button onclick="regEmp()">Register</button></div>`;
+const q=($('sq')?.value||'').toLowerCase();
+return h+`<div class="cd"><h3>Employees</h3><input id="sq" placeholder="Search…" oninput="R();$('sq').focus()" value="${esc(q)}">${tbl(['Code','Name','Dept','Role','Basic','Status',''],DB.emps.filter(e=>(e.name+e.dept+e.email).toLowerCase().includes(q)).map(e=>{const u=DB.users.find(x=>x.empId===e.id);return[e.code,esc(e.name),esc(e.dept),esc(e.desig),ME.role==='hr'||ME.role==='admin'?e.basic.toLocaleString():'',e.active?'active':'inactive',ME.role==='admin'?`<button class="g" onclick="tog('${u.id}')">${e.active?'Deactivate':'Activate'}</button> <button onclick="reset('${u.id}')">Reset</button>`:'']}))}</div>`}
+function att(){const t=td();if(ME.role==='employee'){const r=DB.att.find(a=>a.emp===ME.empId&&a.date===t),mine=DB.att.filter(a=>a.emp===ME.empId).reverse().slice(0,30);
+return`<div class="cd"><h3>Today ${t}</h3><p>${r?`In ${r.in}${r.out?' · Out '+r.out:''} · ${r.status}`:'Not checked in'}</p><button onclick="chk(0)">Check in</button> <button class="g" onclick="chk(1)">Check out</button><p class="mu">Time is stamped by the app clock. Late after start + grace.</p></div><div class="cd"><h3>My attendance</h3>${tbl(['Date','In','Out','Hours','Status'],mine.map(a=>[a.date,a.in,a.out||'-',hrs(a).toFixed(1),a.status]))}</div>`}
+return`<div class="cd"><h3>Attendance board · ${t}</h3>${tbl(['Employee','Dept','In','Out','Status'],DB.emps.filter(e=>e.active).map(e=>{const r=DB.att.find(a=>a.emp===e.id&&a.date===t);return[esc(e.name),esc(e.dept),r?.in||'-',r?.out||'-',st(e.id,t)]}))}</div>`}
+function leave(){if(ME.role==='employee'){const e=ME.empId;return`<div class="cd"><h3>Smart leave</h3><input id="sl" placeholder="Need next Monday and Tuesday off for a wedding"><button onclick="parseLeave()">Fill form</button><span class="mu"> You confirm before saving</span></div>
+<div class="cd"><h3>Apply for leave</h3><select id="lt"><option>annual</option><option>sick</option><option selected>casual</option><option>unpaid</option></select><input id="ls" type="date"><input id="le" type="date"><input id="lr" placeholder="Reason"><button onclick="applyL()">Submit</button><p class="mu">Balance — annual ${bal(e,'annual')}, sick ${bal(e,'sick')}, casual ${bal(e,'casual')}</p></div>
+<div class="cd"><h3>My leaves</h3>${tbl(['Type','From','To','Days','Status','Comment',''],DB.leaves.filter(l=>l.emp===e).map(l=>[l.type,l.start,l.end,l.days,l.status,esc(l.comment),l.status==='pending'?`<button class="r" onclick="cancelL('${l.id}')">Cancel</button>`:'']))}</div>`}
+return`<div class="cd"><h3>Leave requests</h3>${tbl(['Employee','Type','From','To','Days','Reason','Status','Action'],DB.leaves.map(l=>[esc(emp(l.emp)?.name),l.type,l.start,l.end,l.days,esc(l.reason),l.status,l.status==='pending'&&ME.role==='hr'?`<input id="c${l.id}" placeholder="Comment" style="width:120px"><button onclick="decide('${l.id}',1)">✔</button><button class="r" onclick="decide('${l.id}',0)">✘</button>`:esc(l.comment)]))}</div>`}
+function payv(){if(ME.role==='employee'){const mine=Object.entries(DB.payroll).filter(([m,p])=>p.status==='final').map(([m,p])=>[m,p.rows.find(r=>r.emp===ME.empId)]).filter(x=>x[1]);
+const s=slip?mine.find(x=>x[0]===slip):null;return`<div class="cd"><h3>My payslips</h3>${tbl(['Month','Net',''],mine.map(([m,r])=>[m,r.net.toLocaleString(),`<button onclick="slip='${m}';R()">Open</button>`]))}</div>${s?`<div class="cd"><h3>Payslip ${s[0]} — ${esc(s[1].name)}</h3>${tbl(['Gross','Absent','Unpaid','Half days','Deduction','Tax','Net'],[[s[1].gross,s[1].ab,s[1].un,s[1].hd,s[1].ded,s[1].tax,'<b>'+s[1].net+'</b>']])}<button onclick="print()">Print / Save as PDF</button></div>`:''}`}
+const m=pay||td().slice(0,7),p=DB.payroll[m];return`<div class="cd"><h3>Monthly payroll</h3>${ME.role==='hr'?`<input id="pm" type="month" value="${m}"><button onclick="runPay()">Create / refresh draft</button>`:`<input id="pm" type="month" value="${m}" onchange="pay=this.value;R()">`}
+${p?`<p>Status: <b>${p.status}</b> ${p.status==='draft'&&ME.role==='admin'?`<button onclick="finalize('${m}')">Finalize &amp; lock</button>`:''}</p>${tbl(['Employee','Dept','Gross','Absent','Unpaid','Half','Deduction','Tax','Net'],p.rows.map(r=>[esc(r.name),esc(r.dept),r.gross,r.ab,r.un,r.hd,r.ded,r.tax,r.net]))}<p class="mu">Total gross ${p.rows.reduce((s,r)=>s+r.gross,0).toLocaleString()} · net ${p.rows.reduce((s,r)=>s+r.net,0).toLocaleString()}</p>`:'<p class="mu">No payroll for this month</p>'}</div>`}
+const ann=()=>`${ME.role!=='employee'?`<div class="cd"><h3>Post announcement</h3><textarea id="at"></textarea><button onclick="postAnn()">Post</button></div>`:''}<div class="cd"><h3>Announcements</h3>${DB.ann.map(a=>`<p>📢 ${esc(a.t)} <span class="mu">${a.by} · ${a.d}</span></p>`).join('')||'<span class="mu">None</span>'}</div>`;
+const auditv=()=>`<div class="cd"><h3>Audit log</h3>${tbl(['Time','Actor','Action','Entity','Before','After'],DB.audit.slice(0,100).map(a=>[a.t,esc(a.who),a.a,a.en,esc(a.b),esc(a.af)]))}</div>`;
+const aiv=()=>`<div class="cd"><h3>Assistant <span class="mu">· AI-generated label · answers from app data, scoped to your role</span></h3>${CH.map(([w,t])=>`<div class="b ${w}">${esc(t)}</div>`).join('')}<input id="q" placeholder="Who is on leave today?" onkeydown="if(event.key==='Enter')ask()"><button onclick="ask()">Ask</button></div>`;
+const profile=()=>{const e=emp();return ME.role==='employee'?`<div class="cd"><h3>${esc(e.name)} · ${e.code}</h3><p class="mu">${esc(e.dept)} · ${esc(e.desig)} · joined ${e.join}</p><input id="pp" placeholder="Phone" value="${esc(e.phone)}"><input id="pa" placeholder="Address" value="${esc(e.addr)}"><button onclick="savePr()">Save</button></div>`:''};
+
+function R(){const A=$('app'),m=msg?`<div class="msg">${esc(msg)}</div>`:'';
+if(!DB){A.innerHTML=`<div class="cd"><h1>HCM Lite — first run</h1><p class="mu">Create your company and the Admin account. Everything starts empty.</p>Company<input id="c">Admin name<input id="n">Admin email<input id="e" type="email">Password<input id="p" type="password"><button onclick="setup()">Create company</button></div>`;return}
+if(!ME){A.innerHTML=`<div class="cd"><h1>${esc(DB.company)}</h1>${m}Email<input id="e" type="email">Password<input id="p" type="password" onkeydown="if(event.key==='Enter')login()"><button onclick="login()">Sign in</button> <button class="r" onclick="resetAll()">Reset everything (start fresh)</button><p class="mu">Forgot your login? Reset deletes all data in this browser and restarts setup.</p></div>`;return}
+if(ME.must){A.innerHTML=`<div class="cd"><h1>Change your password</h1><p class="mu">Required on first sign-in</p><input id="p" type="password" placeholder="New password"><button onclick="chpw()">Save</button></div>`;return}
+const r=ME.role,T=r==='admin'?[['dash','Dashboard'],['org','Setup'],['people','Employees'],['att','Attendance'],['leave','Leave'],['pay','Payroll'],['ann','Announcements'],['audit','Audit'],['ai','Assistant']]:r==='hr'?[['dash','Dashboard'],['people','Employees'],['att','Attendance'],['leave','Leave'],['pay','Payroll'],['ann','Announcements'],['ai','Assistant']]:[['dash','Dashboard'],['att','Check-in'],['leave','Leave'],['pay','Payslips'],['ann','Announcements'],['ai','Assistant'],['me','Profile']];
+const V={dash,org,people,att,leave,pay:payv,ann,audit:auditv,ai:aiv,me:profile}[tab]||dash;
+A.innerHTML=`<header><b>${esc(DB.company)}</b> <span class="mu">· ${esc(ME.name)} (${r})</span> <button class="g" onclick="logout()">Logout</button></header><div class="nav">${T.map(([k,n])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${n}</button>`).join('')}</div>${m}${V()}`}
+R();
+</script></body></html>
